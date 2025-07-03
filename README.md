@@ -1,4 +1,4 @@
-#BIT.Digit: Mattermost Exchange Integration Plugin
+# BIT.Digit: Mattermost Exchange Integration Plugin
 
 БИТ.Цифра: Плагин для интеграции Mattermost с Microsoft Exchange Server, обеспечивающий автоматическую синхронизацию календаря и статуса пользователей.
 
@@ -31,6 +31,130 @@
 - Удобная настройка учетных данных через веб-форму
 - Тестирование подключения к Exchange
 - Управление настройками напоминаний
+
+## 🏗️ Архитектура и процесс работы
+
+```mermaid
+graph TD
+    A[Пользователь Mattermost] --> B[Exchange Integration Plugin]
+    B --> C[Exchange Web Services]
+    
+    subgraph "Mattermost Server"
+        B --> D[API Endpoints]
+        B --> E[Slash Commands]
+        B --> F[Scheduler]
+        B --> G[Reminder Manager]
+        B --> H[KV Store]
+    end
+    
+    subgraph "Exchange Server"
+        C --> I[Calendar Events]
+        C --> J[Meeting Invitations]
+        C --> K[User Status]
+    end
+    
+    subgraph "Periodic Tasks"
+        F --> L["Calendar Sync<br/>(every 5 min)"]
+        F --> M["Daily Summary<br/>(9:00 AM)"]
+        F --> N["Meeting Notifications<br/>(every 1 min)"]
+        F --> O["Reminder Checks<br/>(every 1 min)"]
+    end
+    
+    L --> P[Update User Status]
+    M --> Q[Send Daily Summary]
+    N --> R[Check New Invitations]
+    O --> S[Send Reminders]
+    
+    P --> T[Mattermost User Status]
+    Q --> U[Direct Message]
+    R --> V[Interactive Notification]
+    S --> W[Reminder Notification]
+    
+    A -.-> X["/exchange setup"]
+    A -.-> Y["/exchange calendar"]
+    A -.-> Z["/exchange reminders"]
+    
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#fff3e0
+    style T fill:#e8f5e8
+    style U fill:#e8f5e8
+    style V fill:#e8f5e8
+    style W fill:#e8f5e8
+```
+
+### Описание компонентов:
+
+**🔧 Основные модули:**
+- **API Endpoints** - REST API для веб-интерфейса и внешних интеграций
+- **Slash Commands** - команды `/exchange` для управления через чат
+- **Scheduler** - планировщик периодических задач
+- **Reminder Manager** - система управления напоминаниями
+- **KV Store** - безопасное хранение учетных данных пользователей
+
+**⏰ Периодические задачи:**
+- **Calendar Sync** (каждые 5 минут) - синхронизация календаря и обновление статуса
+- **Daily Summary** (9:00 утра) - отправка ежедневной сводки встреч
+- **Meeting Notifications** (каждую минуту) - проверка новых приглашений
+- **Reminder Checks** (каждую минуту) - отправка напоминаний о встречах
+
+**📡 Интеграция с Exchange:**
+- Подключение через Exchange Web Services (EWS)
+- Получение календарных событий и приглашений
+- Обновление статуса пользователя на основе занятости
+
+### Поток взаимодействий:
+
+```mermaid
+sequenceDiagram
+    participant User as Пользователь
+    participant MM as Mattermost
+    participant Plugin as Exchange Plugin
+    participant Exchange as Exchange Server
+    
+    Note over User,Exchange: Настройка и начальная синхронизация
+    
+    User->>MM: /exchange setup
+    MM->>Plugin: Открыть настройки
+    Plugin->>User: Веб-форма учетных данных
+    User->>Plugin: Ввод логина/пароля/домена
+    Plugin->>Exchange: Тест подключения (EWS)
+    Exchange->>Plugin: Статус подключения
+    Plugin->>MM: Сохранение в KV Store
+    Plugin->>User: Уведомление об успехе
+    
+    Note over User,Exchange: Автоматическая синхронизация (каждые 5 минут)
+    
+    loop Каждые 5 минут
+        Plugin->>Exchange: Запрос календарных событий
+        Exchange->>Plugin: События календаря
+        Plugin->>Plugin: Анализ текущего статуса
+        alt Пользователь занят
+            Plugin->>MM: Установить статус "DND"
+        else Свободен
+            Plugin->>MM: Установить статус "Online"
+        end
+        Plugin->>Plugin: Обновить напоминания
+    end
+    
+    Note over User,Exchange: Напоминания о встречах
+    
+    loop Каждую минуту
+        Plugin->>Plugin: Проверка напоминаний
+        alt Время напоминания наступило
+            Plugin->>MM: Отправить уведомление с кнопками
+            User->>Plugin: Нажать "Отложить на 5 мин"
+            Plugin->>Plugin: Перенести напоминание
+        end
+    end
+    
+    Note over User,Exchange: Ежедневная сводка
+    
+    Plugin->>Exchange: Запрос событий на день
+    Exchange->>Plugin: События дня
+    Plugin->>MM: Отправить сводку в ЛС
+    MM->>User: Показать сводку встреч
+```
 
 ## Технические характеристики
 
