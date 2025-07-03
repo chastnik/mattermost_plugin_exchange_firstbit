@@ -1,5 +1,6 @@
-# Build artifacts
+# Build artifacts (but not releases/)
 dist/
+!releases/
 server/dist/
 webapp/dist/
 webapp/node_modules/
@@ -29,6 +30,8 @@ webapp/junit.xml
 # Temporary files
 *.tmp
 *.temp
+
+# Note: releases/ folder is NOT ignored - it contains ready-to-install plugin builds
 
 # Plugin bundles
 *.tar.gz 
