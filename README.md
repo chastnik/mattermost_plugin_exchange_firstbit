@@ -1,6 +1,6 @@
-# Mattermost Exchange Integration Plugin
+#BIT.Digit: Mattermost Exchange Integration Plugin
 
-Плагин для интеграции Mattermost с Microsoft Exchange Server, обеспечивающий автоматическую синхронизацию календаря и статуса пользователей.
+БИТ.Цифра: Плагин для интеграции Mattermost с Microsoft Exchange Server, обеспечивающий автоматическую синхронизацию календаря и статуса пользователей.
 
 ## Возможности
 
