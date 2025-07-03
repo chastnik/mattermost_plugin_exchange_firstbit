@@ -1,0 +1,68 @@
+{
+    "id": "com.mattermost.exchange-plugin",
+    "name": "Exchange Integration",
+    "description": "Интеграция с Microsoft Exchange для управления календарем и статусами",
+    "version": "1.0.0",
+    "min_server_version": "6.0.0",
+    "server": {
+        "executables": {
+            "linux-amd64": "server/dist/plugin-linux-amd64",
+            "darwin-amd64": "server/dist/plugin-darwin-amd64",
+            "windows-amd64": "server/dist/plugin-windows-amd64.exe"
+        }
+    },
+    "webapp": {
+        "bundle_path": "webapp/dist/main.js"
+    },
+    "settings_schema": {
+        "header": "Настройки Exchange Integration",
+        "footer": "Настройте подключение к Microsoft Exchange для синхронизации календаря.",
+        "settings": [
+            {
+                "key": "ExchangeServerURL",
+                "display_name": "URL сервера Exchange",
+                "type": "text",
+                "help_text": "URL вашего Exchange сервера (например: https://mail.company.com/owa/)",
+                "placeholder": "https://mail.company.com/owa/",
+                "default": ""
+            },
+            {
+                "key": "EnableCalendarSync",
+                "display_name": "Включить синхронизацию календаря",
+                "type": "bool",
+                "help_text": "Автоматическое обновление статуса на основе событий календаря",
+                "default": true
+            },
+            {
+                "key": "DailySummaryTime",
+                "display_name": "Время ежедневной сводки",
+                "type": "text",
+                "help_text": "Время отправки ежедневной сводки (формат HH:MM)",
+                "placeholder": "09:00",
+                "default": "09:00"
+            },
+            {
+                "key": "EnableMeetingNotifications",
+                "display_name": "Включить уведомления о встречах",
+                "type": "bool",
+                "help_text": "Получать уведомления о новых приглашениях на встречи",
+                "default": true
+            },
+            {
+                "key": "EnableMeetingReminders",
+                "display_name": "Включить напоминания о встречах",
+                "type": "bool",
+                "help_text": "Отправлять напоминания за 15 минут до встречи",
+                "default": true
+            },
+            {
+                "key": "ReminderMinutesBefore",
+                "display_name": "Время напоминания (минуты)",
+                "type": "text",
+                "help_text": "За сколько минут до встречи отправлять напоминание",
+                "placeholder": "15",
+                "default": "15"
+            }
+        ]
+    }
+} 

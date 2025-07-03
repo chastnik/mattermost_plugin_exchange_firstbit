@@ -1,0 +1,19 @@
+{
+  "PluginSettings": {
+    "Directory": "./plugins",
+    "ClientDirectory": "./client/plugins",
+    "Plugins": {
+      "com.mattermost.exchange-plugin": {
+        "ExchangeServerURL": "https://mail.company.com/owa/",
+        "EnableCalendarSync": true,
+        "DailySummaryTime": "09:00",
+        "EnableMeetingNotifications": true
+      }
+    },
+    "PluginStates": {
+      "com.mattermost.exchange-plugin": {
+        "Enable": true
+      }
+    }
+  }
+} 

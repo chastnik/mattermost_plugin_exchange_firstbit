@@ -1,0 +1,34 @@
+# Build artifacts
+dist/
+server/dist/
+webapp/dist/
+webapp/node_modules/
+
+# Go artifacts
+server/coverage.txt
+server/go.mod
+server/go.sum
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test artifacts
+webapp/junit.xml
+
+# Temporary files
+*.tmp
+*.temp
+
+# Plugin bundles
+*.tar.gz 
