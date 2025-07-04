@@ -2,7 +2,7 @@
     "id": "com.mattermost.exchange-plugin",
     "name": "Exchange Integration",
     "description": "Интеграция с Microsoft Exchange для управления календарем и статусами",
-    "version": "1.3.0",
+    "version": "1.3.1",
     "min_server_version": "9.0.0",
     "server": {
         "executables": {

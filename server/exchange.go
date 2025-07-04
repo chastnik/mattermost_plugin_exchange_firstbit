@@ -167,8 +167,11 @@ func NewExchangeClient(serverURL string, credentials *ExchangeCredentials) *Exch
 			MinVersion:         tls.VersionTLS10, // Support older TLS versions
 			MaxVersion:         tls.VersionTLS13,
 		},
-		DisableKeepAlives: false,
-		IdleConnTimeout:   60 * time.Second,
+		DisableKeepAlives:     true,             // Disable keep-alives to avoid 440 timeouts
+		IdleConnTimeout:       30 * time.Second, // Shorter idle timeout
+		MaxIdleConns:          1,                // Minimal connection pooling
+		MaxIdleConnsPerHost:   1,                // One connection per host
+		ResponseHeaderTimeout: 30 * time.Second, // Response header timeout
 	}
 
 	return &ExchangeClient{
@@ -176,7 +179,7 @@ func NewExchangeClient(serverURL string, credentials *ExchangeCredentials) *Exch
 		credentials: credentials,
 		httpClient: &http.Client{
 			Transport: tr,
-			Timeout:   45 * time.Second, // Longer timeout for Russian servers
+			Timeout:   30 * time.Second, // Shorter timeout to avoid 440 errors
 		},
 	}
 }
@@ -418,6 +421,29 @@ func (c *ExchangeClient) TestConnection() error {
 					attemptResults = append(attemptResults, fmt.Sprintf("Попытка %d (%s → %s): HTTP 401 - Неверные учетные данные", attemptCount, userFormat, ewsPath))
 					lastError = fmt.Errorf("HTTP 401: Неверные учетные данные")
 					continue // Try next format
+				}
+
+				if resp.StatusCode == 440 {
+					// HTTP 440 Login Timeout - retry with fresh connection
+					attemptResults = append(attemptResults, fmt.Sprintf("Попытка %d (%s → %s): HTTP 440 - Login Timeout, повтор...", attemptCount, userFormat, ewsPath))
+
+					// Wait a moment and retry with fresh connection
+					time.Sleep(2 * time.Second)
+
+					retryReq, retryErr := http.NewRequest("GET", ewsURL, nil)
+					if retryErr == nil {
+						retryReq.SetBasicAuth(userFormat, c.credentials.Password)
+						retryResp, retryErr := c.httpClient.Do(retryReq)
+						if retryErr == nil {
+							retryResp.Body.Close()
+							if retryResp.StatusCode == 200 || retryResp.StatusCode == 405 {
+								return nil // Success on retry!
+							}
+						}
+					}
+
+					lastError = fmt.Errorf("HTTP 440: Login Timeout (повтор не помог)")
+					continue
 				}
 
 				if resp.StatusCode >= 400 {

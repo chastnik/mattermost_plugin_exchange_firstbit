@@ -1,6 +1,6 @@
 {
   "name": "exchange-plugin-webapp",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Exchange Integration Plugin Webapp",
   "main": "src/index.tsx",
   "scripts": {

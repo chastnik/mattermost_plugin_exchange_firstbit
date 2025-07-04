@@ -52,7 +52,7 @@ func (p *Plugin) handleCredentials(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Test connection
+	// Test connection using lightweight TestConnection method instead of full calendar query
 	config := p.getConfiguration()
 	if config.ExchangeServerURL == "" {
 		http.Error(w, "Exchange server URL not configured", http.StatusInternalServerError)
@@ -60,8 +60,15 @@ func (p *Plugin) handleCredentials(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := NewExchangeClient(config.ExchangeServerURL, &credentials)
-	_, err := client.GetCalendarEventsInRange(time.Now(), time.Now().Add(time.Hour))
+	err := client.TestConnection()
 	if err != nil {
+		// Log the error for debugging
+		p.API.LogError("Failed to save credentials due to connection test failure",
+			"error", err.Error(),
+			"server_url", config.ExchangeServerURL,
+			"username", credentials.Username,
+			"domain", credentials.Domain)
+
 		http.Error(w, fmt.Sprintf("Failed to connect to Exchange: %s", err.Error()), http.StatusBadRequest)
 		return
 	}
@@ -230,20 +237,20 @@ func (p *Plugin) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log connection attempt
-	p.API.LogInfo("Testing Exchange connection", 
-		"server_url", config.ExchangeServerURL, 
-		"username", credentials.Username, 
+	p.API.LogInfo("Testing Exchange connection",
+		"server_url", config.ExchangeServerURL,
+		"username", credentials.Username,
 		"domain", credentials.Domain)
-	
+
 	client := NewExchangeClient(config.ExchangeServerURL, &credentials)
 	err := client.TestConnection()
 	if err != nil {
 		// Log the detailed error
-		p.API.LogError("Exchange connection test failed", "error", err.Error(), 
-			"server_url", config.ExchangeServerURL, 
+		p.API.LogError("Exchange connection test failed", "error", err.Error(),
+			"server_url", config.ExchangeServerURL,
 			"username", credentials.Username,
 			"domain", credentials.Domain)
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
