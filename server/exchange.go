@@ -212,7 +212,7 @@ func (p *Plugin) getNewMeetingInvitations(credentials *ExchangeCredentials) ([]C
 	return []CalendarEvent{}, nil
 }
 
-// GetCalendarEventsInRange gets events in a date range
+// GetCalendarEventsInRange gets events in a date range with retry logic for 440 errors
 func (c *ExchangeClient) GetCalendarEventsInRange(start, end time.Time) ([]CalendarEvent, error) {
 	// Construct SOAP request
 	envelope := &SOAPEnvelope{
@@ -276,17 +276,62 @@ func (c *ExchangeClient) GetCalendarEventsInRange(start, end time.Time) ([]Calen
 	}
 	req.SetBasicAuth(username, c.credentials.Password)
 
-	// Send request
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
+	// Send request with retry logic for HTTP 440
+	var resp *http.Response
+	var body []byte
+	var lastErr error
 
-	// Read response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			// Wait before retry
+			time.Sleep(time.Duration(attempt*2) * time.Second)
+			// Create new request for retry
+			var retryReq *http.Request
+			retryReq, lastErr = http.NewRequest("POST", c.serverURL+c.findWorkingEWSEndpoint(), strings.NewReader(soapRequest))
+			if lastErr != nil {
+				continue
+			}
+			retryReq.Header.Set("Content-Type", "text/xml; charset=utf-8")
+			retryReq.Header.Set("SOAPAction", "\"http://schemas.microsoft.com/exchange/services/2006/messages/FindItem\"")
+
+			// Set auth based on domain
+			username := c.credentials.Username
+			if c.credentials.Domain != "" {
+				if c.credentials.Domain == "pbr" {
+					// Try pbr domain format for 1cbit.ru server
+					username = c.credentials.Username + "@1cbit.ru"
+				} else {
+					username = c.credentials.Domain + "\\" + c.credentials.Username
+				}
+			}
+			retryReq.SetBasicAuth(username, c.credentials.Password)
+			req = retryReq
+		}
+
+		resp, lastErr = c.httpClient.Do(req)
+		if lastErr != nil {
+			continue
+		}
+
+		// Read response
+		body, lastErr = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if lastErr != nil {
+			continue
+		}
+
+		// Check for HTTP 440 Login Timeout
+		if resp.StatusCode == 440 {
+			lastErr = fmt.Errorf("HTTP 440 Login Timeout (попытка %d)", attempt+1)
+			continue // Retry
+		}
+
+		// For other status codes, break and handle below
+		break
+	}
+
+	if lastErr != nil {
+		return nil, fmt.Errorf("failed after %d attempts: %w", 3, lastErr)
 	}
 
 	if resp.StatusCode != http.StatusOK {
