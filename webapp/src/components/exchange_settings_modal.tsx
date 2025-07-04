@@ -1,17 +1,12 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState} from 'react';
 import {useSelector, useDispatch} from 'react-redux';
-
-import {Modal} from 'react-bootstrap';
-
-import {GlobalState} from 'mattermost-redux/types/store';
 
 import {closeExchangeSettingsModal} from '../actions';
 import {ExchangeCredentials} from '../types';
-import {Client4} from 'mattermost-redux/client';
 
 const ExchangeSettingsModal: React.FC = () => {
     const dispatch = useDispatch();
-    const isOpen = useSelector((state: GlobalState) => state.plugins?.plugins?.['com.mattermost.exchange-plugin']?.isSettingsModalOpen || false);
+    const isOpen = useSelector((state: any) => state.plugins?.plugins?.['com.mattermost.exchange-plugin']?.isSettingsModalOpen || false);
     
     const [credentials, setCredentials] = useState<ExchangeCredentials>({
         username: '',
@@ -48,7 +43,7 @@ const ExchangeSettingsModal: React.FC = () => {
         setIsTestingConnection(true);
         
         try {
-            const response = await fetch(`${Client4.getUrl()}/plugins/com.mattermost.exchange-plugin/api/v1/test-connection`, {
+            const response = await fetch(`/plugins/com.mattermost.exchange-plugin/api/v1/test-connection`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -81,7 +76,7 @@ const ExchangeSettingsModal: React.FC = () => {
         setIsSaving(true);
         
         try {
-            const response = await fetch(`${Client4.getUrl()}/plugins/com.mattermost.exchange-plugin/api/v1/credentials`, {
+            const response = await fetch(`/plugins/com.mattermost.exchange-plugin/api/v1/credentials`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -121,19 +116,19 @@ const ExchangeSettingsModal: React.FC = () => {
     }
 
     return (
-        <Modal
-            show={isOpen}
-            onHide={handleClose}
-            size="lg"
-            backdrop="static"
-        >
-            <Modal.Header closeButton>
-                <Modal.Title>
-                    📧 Настройка Exchange Integration
-                </Modal.Title>
-            </Modal.Header>
+        <div className={`modal fade ${isOpen ? 'show' : ''}`} style={{display: isOpen ? 'block' : 'none'}}>
+            <div className="modal-dialog modal-lg">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h4 className="modal-title">
+                            📧 Настройка Exchange Integration
+                        </h4>
+                        <button type="button" className="close" onClick={handleClose}>
+                            <span>&times;</span>
+                        </button>
+                    </div>
             
-            <Modal.Body>
+                    <div className="modal-body">
                 <div className="form-group">
                     <label className="control-label">
                         Имя пользователя <span className="error-text">*</span>
@@ -194,36 +189,38 @@ const ExchangeSettingsModal: React.FC = () => {
                         После настройки плагин будет автоматически синхронизировать ваш календарь и отправлять уведомления.
                     </div>
                 </div>
-            </Modal.Body>
-            
-            <Modal.Footer>
-                <button
-                    type="button"
-                    className="btn btn-default"
-                    onClick={handleClose}
-                >
-                    Отмена
-                </button>
-                
-                <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={testConnection}
-                    disabled={isTestingConnection || !credentials.username || !credentials.password}
-                >
-                    {isTestingConnection ? 'Тестирование...' : 'Тест подключения'}
-                </button>
-                
-                <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={saveCredentials}
-                    disabled={isSaving || !credentials.username || !credentials.password}
-                >
-                    {isSaving ? 'Сохранение...' : 'Сохранить'}
-                </button>
-            </Modal.Footer>
-        </Modal>
+                    </div>
+                    
+                    <div className="modal-footer">
+                        <button
+                            type="button"
+                            className="btn btn-default"
+                            onClick={handleClose}
+                        >
+                            Отмена
+                        </button>
+                        
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={testConnection}
+                            disabled={isTestingConnection || !credentials.username || !credentials.password}
+                        >
+                            {isTestingConnection ? 'Тестирование...' : 'Тест подключения'}
+                        </button>
+                        
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={saveCredentials}
+                            disabled={isSaving || !credentials.username || !credentials.password}
+                        >
+                            {isSaving ? 'Сохранение...' : 'Сохранить'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 };
 

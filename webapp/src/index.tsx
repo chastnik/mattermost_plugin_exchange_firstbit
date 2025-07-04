@@ -1,17 +1,13 @@
 import React from 'react';
-import {Store, Action} from 'redux';
-
-import {GlobalState} from 'mattermost-redux/types/store';
-
-import {PluginRegistry} from 'types/mattermost-webapp';
 
 import ExchangeSettingsModal from './components/exchange_settings_modal';
 import {openExchangeSettingsModal} from './actions';
+import reducer from './reducers';
 
 export default class Plugin {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    public async initialize(registry: PluginRegistry, store: Store<GlobalState, Action<Record<string, unknown>>>) {
-        // @see https://developers.mattermost.com/extend/plugins/webapp/reference/
+    public async initialize(registry: any, store: any) {
+        // Register reducer
+        registry.registerReducer(reducer);
 
         // Register modal for Exchange settings
         registry.registerRootComponent(ExchangeSettingsModal);
