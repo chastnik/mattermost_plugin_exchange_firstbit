@@ -6,7 +6,21 @@ import {ExchangeCredentials} from '../types';
 
 const ExchangeSettingsModal: React.FC = () => {
     const dispatch = useDispatch();
-    const isOpen = useSelector((state: any) => state.plugins?.plugins?.['com.mattermost.exchange-plugin']?.isSettingsModalOpen || false);
+    // Try multiple paths for different Mattermost versions
+    const isOpen = useSelector((state: any) => {
+        console.log('Exchange Plugin: Current Redux state:', state);
+        // Check different possible state paths for different Mattermost versions
+        const paths = [
+            state.plugins?.plugins?.['com.mattermost.exchange-plugin']?.isSettingsModalOpen,
+            state['plugins/com.mattermost.exchange-plugin']?.isSettingsModalOpen,
+            state.plugins?.['com.mattermost.exchange-plugin']?.isSettingsModalOpen,
+            state.exchangePlugin?.isSettingsModalOpen
+        ];
+        
+        const result = paths.find(path => path !== undefined) || false;
+        console.log('Exchange Plugin: Modal isOpen:', result);
+        return result;
+    });
     
     const [credentials, setCredentials] = useState<ExchangeCredentials>({
         username: '',
@@ -111,12 +125,16 @@ const ExchangeSettingsModal: React.FC = () => {
         }
     };
 
-    if (!isOpen) {
+    // Force show modal for debugging
+    const forceShow = window.exchangePluginForceShowModal || isOpen;
+    console.log('Exchange Plugin: Modal render - isOpen:', isOpen, 'forceShow:', forceShow);
+    
+    if (!forceShow) {
         return null;
     }
 
     return (
-        <div className={`modal fade ${isOpen ? 'show' : ''}`} style={{display: isOpen ? 'block' : 'none'}}>
+        <div className={`modal fade ${forceShow ? 'show' : ''}`} style={{display: forceShow ? 'block' : 'none', zIndex: 9999}}>
             <div className="modal-dialog modal-lg">
                 <div className="modal-content">
                     <div className="modal-header">

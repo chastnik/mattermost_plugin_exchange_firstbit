@@ -10,10 +10,15 @@ class Plugin {
         console.log('Exchange Plugin: Registry methods:', Object.keys(registry));
         
         try {
-            // Register reducer for plugin state
+            // Register reducer for plugin state (try multiple registration methods)
             if (registry.registerReducer) {
+                // For Mattermost 9.x - register with plugin ID
+                registry.registerReducer('com.mattermost.exchange-plugin', reducer);
+                console.log('Exchange Plugin: Reducer registered with plugin ID');
+                
+                // Fallback registration
                 registry.registerReducer(reducer);
-                console.log('Exchange Plugin: Reducer registered');
+                console.log('Exchange Plugin: Reducer registered (fallback)');
             }
 
             // Register modal component
@@ -28,7 +33,14 @@ class Plugin {
                     'Exchange Settings',
                     () => {
                         console.log('Exchange Plugin: Opening modal from main menu');
-                        store.dispatch(openExchangeSettingsModal());
+                        console.log('Exchange Plugin: Store state before dispatch:', store.getState());
+                        
+                        const action = openExchangeSettingsModal();
+                        console.log('Exchange Plugin: Dispatching action:', action);
+                        
+                        store.dispatch(action);
+                        
+                        console.log('Exchange Plugin: Store state after dispatch:', store.getState());
                     },
                     () => true
                 );
@@ -63,6 +75,19 @@ class Plugin {
             }
             
             console.log('Exchange Plugin: Initialization complete');
+            
+            // Add global debugging functions
+            (window as any).exchangePluginDebug = {
+                openModal: () => {
+                    console.log('Exchange Plugin: Force opening modal via debug function');
+                    (window as any).exchangePluginForceShowModal = true;
+                    // Force re-render by dispatching empty action
+                    store.dispatch({type: 'EXCHANGE_PLUGIN_DEBUG'});
+                },
+                getState: () => store.getState(),
+                dispatch: (action: any) => store.dispatch(action)
+            };
+            
         } catch (error) {
             console.error('Exchange Plugin: Initialization failed', error);
         }

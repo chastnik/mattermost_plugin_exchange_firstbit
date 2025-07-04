@@ -25,5 +25,11 @@ declare global {
         plugins: {
             [key: string]: any;
         };
+        exchangePluginForceShowModal?: boolean;
+        exchangePluginDebug?: {
+            openModal: () => void;
+            getState: () => any;
+            dispatch: (action: any) => void;
+        };
     }
 } 
