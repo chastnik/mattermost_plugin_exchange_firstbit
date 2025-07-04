@@ -229,21 +229,34 @@ func (p *Plugin) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log connection attempt
+	p.API.LogInfo("Testing Exchange connection", 
+		"server_url", config.ExchangeServerURL, 
+		"username", credentials.Username, 
+		"domain", credentials.Domain)
+	
 	client := NewExchangeClient(config.ExchangeServerURL, &credentials)
-	events, err := client.GetCalendarEventsInRange(time.Now(), time.Now().Add(time.Hour))
+	err := client.TestConnection()
 	if err != nil {
+		// Log the detailed error
+		p.API.LogError("Exchange connection test failed", "error", err.Error(), 
+			"server_url", config.ExchangeServerURL, 
+			"username", credentials.Username,
+			"domain", credentials.Domain)
+		
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"error":   err.Error(),
+			"message": fmt.Sprintf("Ошибка подключения к Exchange: %s", err.Error()),
 		})
 		return
 	}
 
+	p.API.LogInfo("Exchange connection test successful")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"message": fmt.Sprintf("Successfully connected to Exchange. Found %d upcoming events.", len(events)),
+		"message": "Подключение к Exchange успешно установлено!",
 	})
 }
 

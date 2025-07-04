@@ -160,9 +160,15 @@ type ExchangeClient struct {
 
 // NewExchangeClient creates a new Exchange client
 func NewExchangeClient(serverURL string, credentials *ExchangeCredentials) *ExchangeClient {
-	// Create HTTP client with basic auth and TLS config
+	// Create HTTP client with TLS config for Russian servers like 1cbit.ru
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // For self-signed certificates
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,             // For self-signed certificates
+			MinVersion:         tls.VersionTLS10, // Support older TLS versions
+			MaxVersion:         tls.VersionTLS13,
+		},
+		DisableKeepAlives: false,
+		IdleConnTimeout:   60 * time.Second,
 	}
 
 	return &ExchangeClient{
@@ -170,7 +176,7 @@ func NewExchangeClient(serverURL string, credentials *ExchangeCredentials) *Exch
 		credentials: credentials,
 		httpClient: &http.Client{
 			Transport: tr,
-			Timeout:   30 * time.Second,
+			Timeout:   45 * time.Second, // Longer timeout for Russian servers
 		},
 	}
 }
@@ -244,8 +250,11 @@ func (c *ExchangeClient) GetCalendarEventsInRange(start, end time.Time) ([]Calen
 	// Add XML declaration
 	soapRequest := `<?xml version="1.0" encoding="utf-8"?>` + string(xmlData)
 
-	// Create HTTP request
-	ewsURL := c.serverURL + "/EWS/Exchange.asmx"
+	// Create HTTP request - try to find working EWS endpoint
+	ewsURL := c.findWorkingEWSEndpoint()
+	if ewsURL == "" {
+		ewsURL = c.serverURL + "/EWS/Exchange.asmx" // fallback
+	}
 	req, err := http.NewRequest("POST", ewsURL, strings.NewReader(soapRequest))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
@@ -255,12 +264,14 @@ func (c *ExchangeClient) GetCalendarEventsInRange(start, end time.Time) ([]Calen
 	req.Header.Set("Content-Type", "text/xml; charset=utf-8")
 	req.Header.Set("SOAPAction", `"http://schemas.microsoft.com/exchange/services/2006/messages/FindItem"`)
 
-	// Set basic auth
+	// Set NTLM auth
+	var username string
 	if c.credentials.Domain != "" {
-		req.SetBasicAuth(c.credentials.Domain+"\\"+c.credentials.Username, c.credentials.Password)
+		username = c.credentials.Domain + "\\" + c.credentials.Username
 	} else {
-		req.SetBasicAuth(c.credentials.Username, c.credentials.Password)
+		username = c.credentials.Username
 	}
+	req.SetBasicAuth(username, c.credentials.Password)
 
 	// Send request
 	resp, err := c.httpClient.Do(req)
@@ -314,6 +325,184 @@ func (c *ExchangeClient) GetCalendarEventsInRange(start, end time.Time) ([]Calen
 	}
 
 	return events, nil
+}
+
+// TestConnection tests the connection to Exchange without fetching events
+func (c *ExchangeClient) TestConnection() error {
+	// Try different username formats for authentication
+	userFormats := []string{}
+
+	if c.credentials.Domain != "" {
+		// Try various domain formats
+		userFormats = append(userFormats, c.credentials.Domain+"\\"+c.credentials.Username)
+		userFormats = append(userFormats, c.credentials.Username+"@"+c.credentials.Domain)
+		userFormats = append(userFormats, c.credentials.Username+"@"+c.credentials.Domain+".local")
+		userFormats = append(userFormats, c.credentials.Username+"@"+c.credentials.Domain+".ru")
+
+		// Try without domain prefix for 1cbit.ru server
+		if c.credentials.Domain == "pbr" {
+			userFormats = append(userFormats, c.credentials.Username+"@1cbit.ru")
+			userFormats = append(userFormats, c.credentials.Username+"@pbr.1cbit.ru")
+			userFormats = append(userFormats, c.credentials.Username+"@mail.1cbit.ru")
+		}
+	} else {
+		// Just username
+		userFormats = append(userFormats, c.credentials.Username)
+	}
+
+	// Try different EWS endpoints - some servers use different paths
+	ewsPaths := []string{
+		"/owa/EWS/Exchange.asmx", // Приоритет для российских серверов типа 1cbit.ru
+		"/EWS/Exchange.asmx",
+		"/ews/exchange.asmx",
+		"/Exchange/ews/Exchange.asmx",
+		"/exchange/ews/exchange.asmx",
+		"/EWS/Services.wsdl",           // Alternative EWS path
+		"/microsoft-server-activesync", // Sometimes used for OWA
+	}
+
+	var attemptResults []string
+	var lastError error
+	attemptCount := 0
+
+	// First, try to discover the correct EWS endpoint
+	for _, ewsPath := range ewsPaths {
+		ewsURL := c.serverURL + ewsPath
+
+		// Test with the first username format only for endpoint discovery
+		username := userFormats[0]
+
+		req, err := http.NewRequest("GET", ewsURL, nil)
+		if err != nil {
+			continue
+		}
+
+		req.SetBasicAuth(username, c.credentials.Password)
+
+		// Send request
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			continue
+		}
+		resp.Body.Close()
+
+		// If we get anything other than 404, this endpoint exists
+		if resp.StatusCode != 404 {
+			// Now try all username formats with this working endpoint
+			for _, userFormat := range userFormats {
+				attemptCount++
+				req, err := http.NewRequest("GET", ewsURL, nil)
+				if err != nil {
+					attemptResults = append(attemptResults, fmt.Sprintf("Попытка %d (%s → %s): Ошибка создания запроса - %v", attemptCount, userFormat, ewsPath, err))
+					lastError = err
+					continue
+				}
+
+				req.SetBasicAuth(userFormat, c.credentials.Password)
+
+				// Send request
+				resp, err := c.httpClient.Do(req)
+				if err != nil {
+					attemptResults = append(attemptResults, fmt.Sprintf("Попытка %d (%s → %s): Ошибка отправки запроса - %v", attemptCount, userFormat, ewsPath, err))
+					lastError = err
+					continue
+				}
+				defer resp.Body.Close()
+
+				// Check status code
+				if resp.StatusCode == 200 || resp.StatusCode == 405 { // 405 Method Not Allowed is OK for EWS
+					return nil // Success!
+				}
+
+				if resp.StatusCode == 401 {
+					attemptResults = append(attemptResults, fmt.Sprintf("Попытка %d (%s → %s): HTTP 401 - Неверные учетные данные", attemptCount, userFormat, ewsPath))
+					lastError = fmt.Errorf("HTTP 401: Неверные учетные данные")
+					continue // Try next format
+				}
+
+				if resp.StatusCode >= 400 {
+					body, _ := io.ReadAll(resp.Body)
+					bodyStr := strings.TrimSpace(string(body))
+					if len(bodyStr) > 100 {
+						bodyStr = bodyStr[:100] + "..."
+					}
+					attemptResults = append(attemptResults, fmt.Sprintf("Попытка %d (%s → %s): HTTP %d - %s", attemptCount, userFormat, ewsPath, resp.StatusCode, bodyStr))
+					lastError = fmt.Errorf("HTTP %d", resp.StatusCode)
+					continue
+				}
+
+				attemptResults = append(attemptResults, fmt.Sprintf("Попытка %d (%s → %s): HTTP %d - Неожиданный ответ", attemptCount, userFormat, ewsPath, resp.StatusCode))
+			}
+			break // We found a working endpoint, no need to try others
+		}
+	}
+
+	// If no working endpoint found
+	if attemptCount == 0 {
+		attemptResults = append(attemptResults, "Не найден ни один рабочий EWS endpoint")
+		for _, path := range ewsPaths {
+			attemptResults = append(attemptResults, fmt.Sprintf("  • Проверен путь: %s%s", c.serverURL, path))
+		}
+	}
+
+	// Build detailed error message
+	errorMsg := fmt.Sprintf("❌ Не удалось подключиться к Exchange сервер %s ни с одним форматом имени пользователя.\n\nПодробности:\n", c.serverURL)
+	for _, result := range attemptResults {
+		errorMsg += "• " + result + "\n"
+	}
+
+	errorMsg += "\n🔍 Рекомендации для сервера mail.1cbit.ru:\n"
+	errorMsg += "• Попробуйте разные форматы URL:\n"
+	errorMsg += "  - https://mail.1cbit.ru\n"
+	errorMsg += "  - https://mail.1cbit.ru/owa\n"
+	errorMsg += "  - https://owa.1cbit.ru\n"
+	errorMsg += "• Убедитесь, что EWS включен на сервере\n"
+	errorMsg += "• Проверьте, что пользователь имеет права на EWS\n"
+	errorMsg += "• Обратитесь к системному администратору за точным URL\n"
+
+	if lastError != nil {
+		errorMsg += fmt.Sprintf("\nПоследняя ошибка: %v", lastError)
+	}
+
+	return fmt.Errorf(errorMsg)
+}
+
+// findWorkingEWSEndpoint discovers the correct EWS endpoint for the server
+func (c *ExchangeClient) findWorkingEWSEndpoint() string {
+	ewsPaths := []string{
+		"/owa/EWS/Exchange.asmx", // Приоритет для российских серверов типа 1cbit.ru
+		"/EWS/Exchange.asmx",
+		"/ews/exchange.asmx",
+		"/Exchange/ews/Exchange.asmx",
+		"/exchange/ews/exchange.asmx",
+	}
+
+	username := c.credentials.Username
+	if c.credentials.Domain != "" {
+		username = c.credentials.Domain + "\\" + c.credentials.Username
+	}
+
+	for _, path := range ewsPaths {
+		ewsURL := c.serverURL + path
+		req, err := http.NewRequest("GET", ewsURL, nil)
+		if err != nil {
+			continue
+		}
+
+		req.SetBasicAuth(username, c.credentials.Password)
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			continue
+		}
+		resp.Body.Close()
+
+		// If we don't get 404, this endpoint exists
+		if resp.StatusCode != 404 {
+			return ewsURL
+		}
+	}
+
+	return "" // No working endpoint found
 }
 
 // convertToCalendarEvent converts EWS CalendarItem to our CalendarEvent structure
