@@ -35,8 +35,10 @@ module.exports = {
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: 'main.js',
-        library: 'ExchangePlugin',
-        libraryTarget: 'window',
+        library: {
+            name: 'ExchangePlugin',
+            type: 'window'
+        },
     },
     devtool: 'source-map',
 }; 
