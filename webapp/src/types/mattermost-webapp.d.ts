@@ -22,5 +22,8 @@ declare global {
             Client4: any;
             Types: any;
         };
+        plugins: {
+            [key: string]: any;
+        };
     }
 } 

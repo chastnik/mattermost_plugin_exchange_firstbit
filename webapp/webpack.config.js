@@ -28,16 +28,16 @@ module.exports = {
         'react-dom': 'ReactDOM',
         'redux': 'Redux',
         'react-redux': 'ReactRedux',
-        'react-bootstrap': 'ReactBootstrap',
-        'mattermost-redux/client': 'window.MattermostRedux.Client4',
-        'mattermost-redux/types/store': 'window.MattermostRedux.Types',
+        'prop-types': 'PropTypes',
+        'mattermost-redux/client': 'window.MattermostRedux?.Client4',
+        'mattermost-redux/types/store': 'window.MattermostRedux?.Types',
     },
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: 'main.js',
         library: {
-            name: 'ExchangePlugin',
-            type: 'window'
+            name: 'window["plugins"]["com.mattermost.exchange-plugin"]',
+            type: 'assign-properties'
         },
     },
     devtool: 'source-map',
