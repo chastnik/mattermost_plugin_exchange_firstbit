@@ -214,24 +214,24 @@ func (p *Plugin) getNewMeetingInvitations(credentials *ExchangeCredentials) ([]C
 
 // GetCalendarEventsInRange gets events in a date range with retry logic for 440 errors
 func (c *ExchangeClient) GetCalendarEventsInRange(start, end time.Time) ([]CalendarEvent, error) {
-	// Construct SOAP request
+	// Construct SOAP request - use more compatible format for Russian servers
 	envelope := &SOAPEnvelope{
 		Soap:     "http://schemas.xmlsoap.org/soap/envelope/",
 		Types:    "http://schemas.microsoft.com/exchange/services/2006/types",
 		Messages: "http://schemas.microsoft.com/exchange/services/2006/messages",
 		Header: &SOAPHeader{
 			RequestServerVersion: &RequestServerVersion{
-				Version: "Exchange2013",
+				Version: "Exchange2010_SP2", // More compatible version for older Russian servers
 			},
 		},
 		Body: SOAPBody{
 			FindItem: &FindItem{
 				Traversal: "Shallow",
 				ItemShape: &ItemShape{
-					BaseShape: "Default",
+					BaseShape: "Default", // Need full info for calendar events
 				},
 				CalendarView: &CalendarView{
-					MaxEntriesReturned: "1000",
+					MaxEntriesReturned: "100", // Reduced to avoid timeout
 					StartDate:          start.UTC().Format("2006-01-02T15:04:05Z"),
 					EndDate:            end.UTC().Format("2006-01-02T15:04:05Z"),
 				},
@@ -285,9 +285,49 @@ func (c *ExchangeClient) GetCalendarEventsInRange(start, end time.Time) ([]Calen
 		if attempt > 0 {
 			// Wait before retry
 			time.Sleep(time.Duration(attempt*2) * time.Second)
-			// Create new request for retry
+
+			// For HTTP 400 retry, try different SOAP format
+			retrySOAP := soapRequest
+			if attempt == 1 {
+				// Try with Exchange2007_SP1 for compatibility with older Russian servers
+				retryEnvelope := &SOAPEnvelope{
+					Soap:     "http://schemas.xmlsoap.org/soap/envelope/",
+					Types:    "http://schemas.microsoft.com/exchange/services/2006/types",
+					Messages: "http://schemas.microsoft.com/exchange/services/2006/messages",
+					Header: &SOAPHeader{
+						RequestServerVersion: &RequestServerVersion{
+							Version: "Exchange2007_SP1", // Even older version for maximum compatibility
+						},
+					},
+					Body: SOAPBody{
+						FindItem: &FindItem{
+							Traversal: "Shallow",
+							ItemShape: &ItemShape{
+								BaseShape: "Default",
+							},
+							CalendarView: &CalendarView{
+								MaxEntriesReturned: "50", // Further reduced
+								StartDate:          start.UTC().Format("2006-01-02T15:04:05Z"),
+								EndDate:            end.UTC().Format("2006-01-02T15:04:05Z"),
+							},
+							ParentFolderIds: &ParentFolderIds{
+								DistinguishedFolderId: &DistinguishedFolderId{
+									Id: "calendar",
+								},
+							},
+						},
+					},
+				}
+
+				retryXmlData, xmlErr := xml.Marshal(retryEnvelope)
+				if xmlErr == nil {
+					retrySOAP = `<?xml version="1.0" encoding="utf-8"?>` + string(retryXmlData)
+				}
+			}
+
+			// Create new request for retry - use the same ewsURL
 			var retryReq *http.Request
-			retryReq, lastErr = http.NewRequest("POST", c.serverURL+c.findWorkingEWSEndpoint(), strings.NewReader(soapRequest))
+			retryReq, lastErr = http.NewRequest("POST", ewsURL, strings.NewReader(retrySOAP))
 			if lastErr != nil {
 				continue
 			}
@@ -324,6 +364,13 @@ func (c *ExchangeClient) GetCalendarEventsInRange(start, end time.Time) ([]Calen
 		if resp.StatusCode == 440 {
 			lastErr = fmt.Errorf("HTTP 440 Login Timeout (попытка %d)", attempt+1)
 			continue // Retry
+		}
+
+		// Check for HTTP 400 Bad Request - often due to SOAP format issues
+		if resp.StatusCode == 400 && attempt == 0 {
+			// Try with different Exchange version on first 400 error
+			lastErr = fmt.Errorf("HTTP 400 Bad Request (попытка %d) - возможно неправильный формат SOAP", attempt+1)
+			continue // Retry with different settings
 		}
 
 		// For other status codes, break and handle below
